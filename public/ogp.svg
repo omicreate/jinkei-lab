@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" font-family="'Noto Sans JP','Hiragino Sans','Yu Gothic UI',sans-serif">
+  <!-- OGP: ソフトテニスIQ｜陣形ラボ（アプリと同じ記号体系: 丸=Aチーム/四角=Bチーム・コーラル=打点・青緑=セオリー） -->
+  <rect width="1200" height="630" fill="#0d3476"/>
+
+  <!-- 右: アプリの盤面ミニチュア -->
+  <g>
+    <!-- コート面 -->
+    <rect x="790" y="85" width="212" height="460" fill="#428f91"/>
+    <!-- セオリー内（ネット→相手ベースライン） -->
+    <polygon points="874.6,315 979.9,315 1002,85 790,85" fill="#22aaa1" fill-opacity="0.34"/>
+    <!-- コートライン -->
+    <g stroke="#f8fbff" stroke-width="3" fill="none">
+      <rect x="790" y="85" width="212" height="460"/>
+      <line x1="816.4" y1="85" x2="816.4" y2="545"/>
+      <line x1="985.6" y1="85" x2="985.6" y2="545"/>
+      <line x1="816.4" y1="191.1" x2="985.6" y2="191.1"/>
+      <line x1="816.4" y1="438.9" x2="985.6" y2="438.9"/>
+      <line x1="896" y1="191.1" x2="896" y2="438.9"/>
+    </g>
+    <!-- ネット -->
+    <line x1="780" y1="315" x2="1012" y2="315" stroke="#112a50" stroke-width="7"/>
+    <!-- セオリー線（打点→左右コーナー・センターマーク） -->
+    <g stroke="#0a6e6a" fill="none" stroke-linecap="round">
+      <line x1="958" y1="542" x2="773.5" y2="40" stroke-width="5"/>
+      <line x1="958" y1="542" x2="889.9" y2="40" stroke-width="4" stroke-dasharray="12 9"/>
+      <line x1="958" y1="542" x2="1006.3" y2="40" stroke-width="5"/>
+    </g>
+    <!-- 測定線＋ピル（B前衛→右コース） -->
+    <line x1="930" y1="285" x2="982.7" y2="285" stroke="#e64e16" stroke-width="3" stroke-dasharray="7 6"/>
+    <rect x="924" y="234" width="74" height="30" rx="15" fill="#e64e16" stroke="#fff" stroke-width="2"/>
+    <text x="961" y="256" text-anchor="middle" font-size="18" font-weight="800" fill="#fff">3.4本</text>
+    <!-- Bチーム=四角 -->
+    <rect x="812" y="56" width="28" height="28" rx="6" fill="#0f5f63" stroke="#fff" stroke-width="4"/>
+    <rect x="916" y="271" width="28" height="28" rx="6" fill="#0f5f63" stroke="#fff" stroke-width="4"/>
+    <!-- Aチーム=丸 -->
+    <circle cx="830" cy="340" r="16" fill="#123f86" stroke="#fff" stroke-width="4"/>
+    <circle cx="940" cy="560" r="16" fill="#123f86" stroke="#fff" stroke-width="4"/>
+    <!-- 打点 -->
+    <circle cx="958" cy="542" r="9" fill="#fff" stroke="#ff6a28" stroke-width="4"/>
+  </g>
+
+  <!-- 左: タイトル -->
+  <text x="90" y="305" font-size="104" font-weight="800" fill="#ffffff" letter-spacing="4">陣形ラボ</text>
+  <text x="94" y="372" font-size="33" font-weight="600" fill="#cfe0f5">配置で考えるコート分析</text>
+  <text x="94" y="420" font-size="25" font-weight="700" fill="#8fb3e8">ソフトテニスIQ</text>
+
+  <!-- 左下: ラケット縮尺（アプリの物差し思想） -->
+  <g>
+    <g stroke="#8fb3e8" fill="none">
+      <ellipse cx="118" cy="497" rx="24" ry="16" stroke-width="4"/>
+      <line x1="142" y1="497" x2="158" y2="497" stroke-width="5"/>
+    </g>
+    <rect x="158" y="490" width="26" height="14" rx="6" fill="#8fb3e8"/>
+    <text x="200" y="505" font-size="22" font-weight="600" fill="#8fb3e8">距離は「ラケット◯本分」で判定（1本 = 0.69m）</text>
+  </g>
+</svg>
