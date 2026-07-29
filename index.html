@@ -25,8 +25,9 @@
       try {
         var src = new URLSearchParams(location.search).get('src');
         if (!src) return;                                 // 印のないアクセスは何もしない
-        if (sessionStorage.getItem('src_sent')) return;   // 同じ訪問での二重計上を防ぐ
-        sessionStorage.setItem('src_sent', '1');
+        var KEY = 'src_sent:' + APP + ':' + src;          // 3アプリは同一オリジンのため、キーを分けないと共有される
+    if (sessionStorage.getItem(KEY)) return;          // 同じ訪問・同じ面での二重計上だけを防ぐ
+        sessionStorage.setItem(KEY, '1');
         var url = ENDPOINT + '?src=' + encodeURIComponent(src) + '&app=' + encodeURIComponent(APP);
         if (navigator.sendBeacon) navigator.sendBeacon(url);
         else fetch(url, { mode: 'no-cors', keepalive: true });
