@@ -6,6 +6,7 @@
 
 - 使う: https://omicreate.github.io/jinkei-lab/
 - リポジトリ: https://github.com/omicreate/jinkei-lab
+- 更新記録: [CHANGELOG.md](CHANGELOG.md)
 
 ## 主な機能
 
