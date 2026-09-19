@@ -216,7 +216,7 @@ export default function App() {
   const copyShareUrl = async () => {
     try {
       await navigator.clipboard.writeText(shareUrl)
-      setShareNotice('配置リンクをコピーしました（流入パラメータは含みません）')
+      setShareNotice('配置のリンクをコピーしました（計測用の印は含みません）')
     } catch {
       setShareNotice('コピーできませんでした。アドレスバーのリンクを共有してください')
     }
