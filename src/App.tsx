@@ -1,22 +1,24 @@
 import { useEffect, useMemo, useState } from 'react'
 import { RotateCcw, RotateCw, Settings, ZoomIn, ZoomOut } from 'lucide-react'
 import CourtCanvas from './CourtCanvas'
-import { RACKET_LENGTH, opponentDistances, reachTier } from './geometry'
+import { RACKET_LENGTH, opponentDistances, reachThresholds, reachTier, weakestHole } from './geometry'
+import { buildShareUrl, parseLayoutSearch } from './layoutShare'
 import { FORMATION_OPTIONS, TENKAI_OPTIONS, applyFormation, applyTenkai } from './presets'
 import type { Formation, Team, Tenkai } from './presets'
-import type { Handedness, MatchMode, Player, Orientation, Stroke } from './types'
+import { loadJuniorPref, loadSlots, persistJuniorPref, persistSlots } from './slots'
+import type { Slot } from './slots'
+import type { Handedness, MatchMode, Player, PlayerRole, Orientation, Stroke } from './types'
 
-// 初期配置は正クロスの基準配置（プリセットと地続きにする）
 const doublesSeed: Player[] = applyTenkai([
-  { id: 'a1', team: 'A', label: 'A後衛', x: 0, y: 0, hand: 'right', stroke: 'fore' },
-  { id: 'a2', team: 'A', label: 'A前衛', x: 0, y: 0, hand: 'right', stroke: 'fore' },
-  { id: 'b1', team: 'B', label: 'B後衛', x: 0, y: 0, hand: 'right', stroke: 'fore' },
-  { id: 'b2', team: 'B', label: 'B前衛', x: 0, y: 0, hand: 'left', stroke: 'back' },
+  { id: 'a1', team: 'A', label: 'A後衛', x: 0, y: 0, hand: 'right', stroke: 'fore', role: 'back' },
+  { id: 'a2', team: 'A', label: 'A前衛', x: 0, y: 0, hand: 'right', stroke: 'fore', role: 'front' },
+  { id: 'b1', team: 'B', label: 'B後衛', x: 0, y: 0, hand: 'right', stroke: 'fore', role: 'back' },
+  { id: 'b2', team: 'B', label: 'B前衛', x: 0, y: 0, hand: 'left', stroke: 'back', role: 'front' },
 ], 'cross')
 
 const singlesSeed: Player[] = [
-  { id: 'a1', team: 'A', label: 'A', x: 1.2, y: -8.8, hand: 'right', stroke: 'fore' },
-  { id: 'b1', team: 'B', label: 'B', x: -1.2, y: 8.8, hand: 'left', stroke: 'back' },
+  { id: 'a1', team: 'A', label: 'A', x: 1.2, y: -8.8, hand: 'right', stroke: 'fore', role: 'all' },
+  { id: 'b1', team: 'B', label: 'B', x: -1.2, y: 8.8, hand: 'left', stroke: 'back', role: 'all' },
 ]
 
 const TIER_LABEL = {
@@ -25,25 +27,20 @@ const TIER_LABEL = {
   open: 'リーチ外',
 } as const
 
-// 配置メモリ（端末内保存・3枠）
-type Slot = {
-  name: string
-  mode: MatchMode
-  players: Player[]
-  activeIds: string[]
-  premise: string
-} | null
+const publicLayout = typeof window === 'undefined' ? null : parseLayoutSearch(window.location.search)
 
-const SLOTS_KEY = 'sti-court-slots'
+function initialPlayersByMode() {
+  if (!publicLayout) return { doubles: doublesSeed, singles: singlesSeed }
+  if (publicLayout.mode === 'doubles') return { doubles: publicLayout.players, singles: singlesSeed }
+  return { doubles: doublesSeed, singles: publicLayout.players }
+}
 
-function loadSlots(): Slot[] {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(SLOTS_KEY) || '')
-    if (Array.isArray(parsed) && parsed.length === 3) return parsed
-  } catch {
-    // 破損・未保存時は空で開始
-  }
-  return [null, null, null]
+function initialActiveByMode(): Record<MatchMode, string[]> {
+  const doubles = ['a1']
+  const singles = ['a1']
+  if (publicLayout?.mode === 'doubles') return { doubles: publicLayout.activeIds, singles }
+  if (publicLayout?.mode === 'singles') return { doubles, singles: publicLayout.activeIds }
+  return { doubles, singles }
 }
 
 const ZOOM_MIN = 0.8
@@ -58,28 +55,29 @@ function Segmented<T extends string>({ value, options, onChange, label }: {
   return <div className="control-block">
     <span className="control-label">{label}</span>
     <div className="segmented">
-      {options.map((option) => <button key={option.value} className={value === option.value ? 'selected' : ''} onClick={() => onChange(option.value)}>{option.label}</button>)}
+      {options.map((option) => <button key={option.value} type="button" className={value === option.value ? 'selected' : ''} onClick={() => onChange(option.value)}>{option.label}</button>)}
     </div>
   </div>
 }
 
 export default function App() {
-  const [mode, setMode] = useState<MatchMode>('doubles')
-  const [playersByMode, setPlayersByMode] = useState({ doubles: doublesSeed, singles: singlesSeed })
-  const [activeByMode, setActiveByMode] = useState<Record<MatchMode, string[]>>({ doubles: ['a1'], singles: ['a1'] })
+  const [mode, setMode] = useState<MatchMode>(publicLayout?.mode ?? 'doubles')
+  const [playersByMode, setPlayersByMode] = useState(initialPlayersByMode)
+  const [activeByMode, setActiveByMode] = useState<Record<MatchMode, string[]>>(initialActiveByMode)
   const [orientation, setOrientation] = useState<Orientation>('vertical')
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [rulerPos, setRulerPos] = useState<{ x: number | null; y: number | null }>({ x: null, y: null })
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [premise, setPremise] = useState('')
+  const [premise, setPremise] = useState(publicLayout?.premise ?? '')
+  const [junior, setJunior] = useState(publicLayout?.junior ?? loadJuniorPref)
   const [slots, setSlots] = useState<Slot[]>(loadSlots)
   const [undoSnapshot, setUndoSnapshot] = useState<{ players: Player[]; activeIds: string[]; premise: string } | null>(null)
-  // プリセットボタンのハイライト。手動ドラッグで配置が基準から外れたら消灯する
+  const [shareNotice, setShareNotice] = useState('')
   const [presetState, setPresetState] = useState<{ tenkai: Tenkai | null; formationA: Formation | null; formationB: Formation | null }>({
-    tenkai: 'cross',
-    formationA: 'gankou',
-    formationB: 'gankou',
+    tenkai: publicLayout ? null : 'cross',
+    formationA: publicLayout ? null : 'gankou',
+    formationB: publicLayout ? null : 'gankou',
   })
 
   const players = playersByMode[mode]
@@ -87,14 +85,31 @@ export default function App() {
   const actives = activeIds
     .map((id) => players.find((player) => player.id === id))
     .filter((player): player is Player => !!player)
-  // 利き手・打球面の設定は「最後にタップした選手」に適用する
   const editTarget = actives.length ? actives[actives.length - 1] : null
+
+  const publicLayoutState = useMemo(() => ({
+    v: 1 as const,
+    mode,
+    players,
+    activeIds,
+    premise,
+    junior,
+  }), [mode, players, activeIds, premise, junior])
+
+  const shareUrl = useMemo(() => {
+    if (typeof window === 'undefined') return ''
+    return buildShareUrl(window.location.href, publicLayoutState)
+  }, [publicLayoutState])
+
+  const holes = useMemo(
+    () => actives.map((shooter) => weakestHole(shooter, players, mode, junior)).filter((hole) => hole !== null),
+    [actives, players, mode, junior],
+  )
 
   const distanceGroups = useMemo(() => {
     if (!actives.length) return null
     return actives.map((shooter) => ({
       shooter,
-      // 担当2コースのうち遠い方（=守り切れない穴）が大きい選手を上に
       rows: [...opponentDistances(shooter, players, mode)].sort(
         (a, b) => Math.max(b.outer.distance, b.center.distance) - Math.max(a.outer.distance, a.center.distance),
       ),
@@ -128,7 +143,6 @@ export default function App() {
 
   const loadFormation = (team: Team, formation: Formation) => {
     setPlayersByMode((current) => ({ ...current, doubles: applyFormation(current.doubles, team, formation) }))
-    // 片チームの陣形を変えると展開の基準配置ではなくなるので、展開のハイライトは消す
     setPresetState((current) => ({
       tenkai: null,
       formationA: team === 'A' ? formation : current.formationA,
@@ -138,12 +152,10 @@ export default function App() {
 
   const handlePlayersChange = (next: Player[]) => {
     setPlayersByMode((current) => ({ ...current, [mode]: next }))
-    // 手動ドラッグで動かしたら、もう基準配置ではない
     if (mode === 'doubles') setPresetState({ tenkai: null, formationA: null, formationB: null })
   }
 
   const reset = () => {
-    // 誤タップで作った配置を失わないよう、リセット直前の状態を「元に戻す」用に保持する
     setUndoSnapshot({ players, activeIds, premise })
     setPlayersByMode((current) => ({ ...current, [mode]: mode === 'doubles' ? doublesSeed : singlesSeed }))
     setActiveByMode((current) => ({ ...current, [mode]: ['a1'] }))
@@ -163,20 +175,21 @@ export default function App() {
     setUndoSnapshot(null)
   }
 
-  const persistSlots = (next: Slot[]) => {
+  const saveSlotsLocal = (next: Slot[]) => {
     setSlots(next)
     try {
-      localStorage.setItem(SLOTS_KEY, JSON.stringify(next))
+      persistSlots(next)
     } catch {
-      // 保存できない環境でも画面上の状態は維持する
+      // 端末内保存できない環境でも画面上の状態は維持する
     }
   }
 
   const saveSlot = (index: number) => {
+    if (slots[index] && !window.confirm('この端末内の枠を上書きしますか？以前の配置は消えます（共有URLには影響しません）。')) return
     const now = new Date()
     const stamp = `${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
     const name = premise.trim() || `${mode === 'doubles' ? 'ダブルス' : 'シングルス'} ${stamp}`
-    persistSlots(slots.map((slot, i) => i === index ? { name, mode, players, activeIds, premise } : slot))
+    saveSlotsLocal(slots.map((slot, i) => i === index ? { name, mode, players, activeIds, premise } : slot))
   }
 
   const loadSlot = (index: number) => {
@@ -190,7 +203,8 @@ export default function App() {
   }
 
   const clearSlot = (index: number) => {
-    persistSlots(slots.map((slot, i) => i === index ? null : slot))
+    if (!window.confirm('この端末内の枠を削除しますか？')) return
+    saveSlotsLocal(slots.map((slot, i) => i === index ? null : slot))
   }
 
   const rotate = () => {
@@ -199,12 +213,40 @@ export default function App() {
     setRulerPos({ x: null, y: null })
   }
 
+  const copyShareUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      setShareNotice('配置リンクをコピーしました（流入パラメータは含みません）')
+    } catch {
+      setShareNotice('コピーできませんでした。アドレスバーのリンクを共有してください')
+    }
+  }
+
+  const changeJunior = (value: boolean) => {
+    setJunior(value)
+    persistJuniorPref(value)
+  }
+
   useEffect(() => {
-    // 「元に戻す」トーストは7秒で自動的に引っ込める
     if (!undoSnapshot) return
     const timer = setTimeout(() => setUndoSnapshot(null), 7000)
     return () => clearTimeout(timer)
   }, [undoSnapshot])
+
+  useEffect(() => {
+    if (!shareNotice) return
+    const timer = setTimeout(() => setShareNotice(''), 4000)
+    return () => clearTimeout(timer)
+  }, [shareNotice])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.history.replaceState) return
+    const params = new URLSearchParams(window.location.search)
+    if (!params.has('src')) return
+    params.delete('src')
+    const next = params.toString()
+    window.history.replaceState(null, '', `${window.location.pathname}${next ? `?${next}` : ''}${window.location.hash}`)
+  }, [])
 
   const statusHeading = actives.length
     ? `${actives.map((player) => player.label).join('・')}を分析中`
@@ -215,6 +257,9 @@ export default function App() {
       ? '打点から3本のセオリー線と返球エリアを表示中。もう一度タップで解除、他の選手をタップで追加表示できます。'
       : `利き手・打球面の設定は、最後にタップした${editTarget?.label}に適用されます。デッドゾーン（斜線）は1人選択のときだけ表示します。`
 
+  const editRole: PlayerRole = editTarget?.role ?? (mode === 'singles' ? 'all' : 'back')
+  const defenderGuide = reachThresholds({ role: editTarget?.role ?? 'back', junior })
+
   return <main className="app-shell">
     <header className="app-header">
       <div className="brand-mark">ST</div>
@@ -223,13 +268,13 @@ export default function App() {
         <p>ソフトテニスIQ｜コートポジション分析</p>
       </div>
       <div className="header-actions">
-        <button className="icon-button" onClick={reset}><RotateCcw size={18} />リセット</button>
-        <button className="icon-button" onClick={rotate}><RotateCw size={18} />コート回転</button>
+        <button type="button" className="icon-button" onClick={reset}><RotateCcw size={18} />リセット</button>
+        <button type="button" className="icon-button" onClick={rotate}><RotateCw size={18} />コート回転</button>
       </div>
     </header>
 
     <aside className={`settings-drawer ${settingsOpen ? 'open' : ''}`} aria-label="設定パネル">
-      <button className="drawer-handle" onClick={() => setSettingsOpen((value) => !value)} aria-expanded={settingsOpen}>
+      <button type="button" className="drawer-handle" onClick={() => setSettingsOpen((value) => !value)} aria-expanded={settingsOpen}>
         <Settings size={16} />
         <span>設定</span>
       </button>
@@ -238,6 +283,8 @@ export default function App() {
           <Segmented value={mode} label="モード" options={[{ value: 'doubles', label: 'ダブルス' }, { value: 'singles', label: 'シングルス' }]} onChange={setMode} />
           <Segmented<Handedness> value={editTarget?.hand ?? 'right'} label="利き手" options={[{ value: 'right', label: '右利き' }, { value: 'left', label: '左利き' }]} onChange={(hand) => updateEditTarget({ hand })} />
           <Segmented<Stroke> value={editTarget?.stroke ?? 'fore'} label="打球面" options={[{ value: 'fore', label: 'フォア' }, { value: 'back', label: 'バック' }]} onChange={(stroke) => updateEditTarget({ stroke })} />
+          {mode === 'doubles' && <Segmented<PlayerRole> value={editRole === 'all' ? 'back' : editRole} label="役割（到達目安）" options={[{ value: 'back', label: '後衛' }, { value: 'front', label: '前衛' }]} onChange={(role) => updateEditTarget({ role })} />}
+          <Segmented value={junior ? 'junior' : 'adult'} label="到達の物差し" options={[{ value: 'adult', label: '一般' }, { value: 'junior', label: 'ジュニア' }]} onChange={(value) => changeJunior(value === 'junior')} />
         </div>
 
         {mode === 'doubles' && <div className="preset-panel">
@@ -245,7 +292,7 @@ export default function App() {
             <span className="control-label">展開プリセット（両チーム一括・雁行陣）</span>
             <div className="preset-grid cols-2">
               {TENKAI_OPTIONS.map((option) => (
-                <button key={option.value} className={presetState.tenkai === option.value ? 'selected' : ''} onClick={() => loadTenkai(option.value)}>{option.label}</button>
+                <button key={option.value} type="button" className={presetState.tenkai === option.value ? 'selected' : ''} onClick={() => loadTenkai(option.value)}>{option.label}</button>
               ))}
             </div>
           </div>
@@ -256,6 +303,7 @@ export default function App() {
                 {FORMATION_OPTIONS.map((option) => (
                   <button
                     key={option.value}
+                    type="button"
                     className={(team === 'A' ? presetState.formationA : presetState.formationB) === option.value ? 'selected' : ''}
                     onClick={() => loadFormation(team, option.value)}
                   >{option.label}</button>
@@ -279,14 +327,14 @@ export default function App() {
         </div>
 
         <div className="slots-panel">
-          <span className="control-label">配置メモリ（この端末に保存・3枠）</span>
+          <span className="control-label">配置メモリ（この端末のブラウザ内のみ・3枠。共有や計測には送りません）</span>
           {slots.map((slot, index) => (
             <div className="slot-row" key={index}>
               {slot ? <>
-                <button className="slot-load" onClick={() => loadSlot(index)} title="この配置を読み込む">{slot.name}</button>
-                <button className="slot-mini" onClick={() => saveSlot(index)} title="今の配置で上書き">上書き</button>
-                <button className="slot-mini danger" onClick={() => clearSlot(index)} title="削除">削除</button>
-              </> : <button className="slot-empty" onClick={() => saveSlot(index)}>空きスロット{index + 1}｜今の配置を保存</button>}
+                <button type="button" className="slot-load" onClick={() => loadSlot(index)} title="この配置を読み込む">{slot.name}</button>
+                <button type="button" className="slot-mini" onClick={() => saveSlot(index)} title="今の配置で上書き">上書き</button>
+                <button type="button" className="slot-mini danger" onClick={() => clearSlot(index)} title="削除">削除</button>
+              </> : <button type="button" className="slot-empty" onClick={() => saveSlot(index)}>空きスロット{index + 1}｜今の配置を保存</button>}
             </div>
           ))}
         </div>
@@ -303,7 +351,8 @@ export default function App() {
             <li>選手をタップでエリア表示／もう一度タップで解除（全員分・最大4人まで同時表示）</li>
             <li>選手をドラッグして配置。コートは空白ドラッグでスライド、2本指でズーム</li>
             <li>ラケット定規はつかんで平行移動できる（測りたい場所に当てる）</li>
-            <li>距離パネルで「相手がラケット何本分で届くか」をチェック</li>
+            <li>距離パネルとコート上の「今の穴」で、相手がラケット何本分で届くかをチェック</li>
+            <li>リンク共有は今の配置だけを含みます。端末内メモリとは別物です</li>
           </ol>
         </div>
       </div>
@@ -330,9 +379,9 @@ export default function App() {
             </span>
           </div>
           <div className="zoom-controls">
-            <button aria-label="縮小" onClick={() => applyZoom(+(zoom - 0.1).toFixed(2))}><ZoomOut size={18} /></button>
+            <button type="button" aria-label="縮小" onClick={() => applyZoom(+(zoom - 0.1).toFixed(2))}><ZoomOut size={18} /></button>
             <span>{Math.round(zoom * 100)}%</span>
-            <button aria-label="拡大" onClick={() => applyZoom(+(zoom + 0.1).toFixed(2))}><ZoomIn size={18} /></button>
+            <button type="button" aria-label="拡大" onClick={() => applyZoom(+(zoom + 0.1).toFixed(2))}><ZoomIn size={18} /></button>
           </div>
         </div>
         <CourtCanvas
@@ -344,11 +393,16 @@ export default function App() {
           pan={pan}
           rulerPos={rulerPos}
           premise={premise}
+          junior={junior}
+          holes={holes}
+          shareUrl={shareUrl}
           onPlayersChange={handlePlayersChange}
           onToggleActive={toggleActive}
           onZoomChange={applyZoom}
           onPanChange={setPan}
           onRulerPosChange={setRulerPos}
+          onShareUrl={copyShareUrl}
+          onShareNotice={setShareNotice}
         />
       </div>
 
@@ -360,7 +414,9 @@ export default function App() {
         {distanceGroups ? distanceGroups.map((group) => (
           <div className="distance-group" key={group.shooter.id}>
             <h3 className="distance-shooter">打者: {group.shooter.label}</h3>
-            {group.rows.map((entry) => (
+            {group.rows.map((entry) => {
+              const defender = players.find((player) => player.id === entry.playerId)
+              return (
               <div className="distance-row" key={entry.playerId}>
                 <div className="distance-head">
                   <strong>{entry.label}</strong>
@@ -369,7 +425,7 @@ export default function App() {
                   { key: 'outer', label: entry.outer.side === 'left' ? '左コース' : '右コース', measureItem: entry.outer },
                   { key: 'center', label: 'センター', measureItem: entry.center },
                 ].map(({ key, label, measureItem }) => {
-                  const tier = reachTier(measureItem.distance)
+                  const tier = reachTier(measureItem.distance, { role: defender?.role ?? 'all', junior })
                   return (
                     <div className="distance-side" key={key}>
                       <div className="distance-side-head">
@@ -382,16 +438,23 @@ export default function App() {
                   )
                 })}
               </div>
-            ))}
+              )
+            })}
           </div>
         )) : <p className="distance-empty">選手をタップすると、相手選手ごとの距離を表示します。</p>}
-        <small>判定の目安: ラケット2本以内=カバー圏内／3本以内=踏み込みで届く／それ以上=リーチ外。ラケットの長さ基準なので、大人も子供も同じ物差しで使えます。</small>
+        <small>
+          判定は守る側の役割で変えています。今の目安は
+          {junior ? 'ジュニア' : '一般'}・{editTarget?.role === 'front' ? '前衛' : editTarget?.role === 'back' ? '後衛' : 'シングルス'}で
+          {defenderGuide.cover}本以内=カバー／{defenderGuide.stretch}本以内=踏み込み／それ以上=リーチ外。
+          平面距離であり、球速・高さ・回転は見ていません。ラケット長は共通単位、ジュニアは歩幅を短く見た閾値です。
+        </small>
       </aside>
     </section>
 
     {undoSnapshot && <div className="undo-toast" role="status">
       リセットしました
-      <button onClick={undoReset}>元に戻す</button>
+      <button type="button" onClick={undoReset}>元に戻す</button>
     </div>}
+    {shareNotice && <div className="undo-toast" role="status">{shareNotice}</div>}
   </main>
 }
