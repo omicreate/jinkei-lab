@@ -1,4 +1,4 @@
-import type { MatchMode, Orientation, Player, Point } from './types'
+import type { MatchMode, Orientation, Player, PlayerRole, Point } from './types'
 
 export const COURT_LENGTH = 23.77
 export const DOUBLES_WIDTH = 10.97
@@ -116,14 +116,73 @@ function closestPointOnSegment(point: Point, a: Point, b: Point): Point {
 // ソフトテニスラケットの長さ。大人も子供も共通の物差しとして距離換算に使う
 export const RACKET_LENGTH = 0.69
 
-// 到達判定: 〜2本=カバー圏内（基本）/ 〜3本=踏み込みで届く（攻めの位置取り）/ 3本超=リーチ外
+// 到達判定（ラケット本数）:
+// 後衛・シングルス: 〜2本=カバー / 〜3本=踏み込み / それ以上=リーチ外
+// 前衛: ボレーの一歩が短いので 〜1.5本 / 〜2.5本
+// ジュニア: 歩幅が短いのでそれぞれ 0.5本ぶん厳しめ（下限あり）
 export type ReachTier = 'cover' | 'stretch' | 'open'
 
-export function reachTier(distance: number): ReachTier {
+export type ReachContext = {
+  role: PlayerRole
+  junior: boolean
+}
+
+export function reachThresholds(ctx: ReachContext): { cover: number; stretch: number } {
+  const base = ctx.role === 'front'
+    ? { cover: 1.5, stretch: 2.5 }
+    : { cover: 2, stretch: 3 }
+  if (!ctx.junior) return base
+  return {
+    cover: Math.max(1, +(base.cover - 0.5).toFixed(2)),
+    stretch: Math.max(1.5, +(base.stretch - 0.5).toFixed(2)),
+  }
+}
+
+export function reachTier(distance: number, ctx: ReachContext): ReachTier {
   const rackets = distance / RACKET_LENGTH
-  if (rackets <= 2) return 'cover'
-  if (rackets <= 3) return 'stretch'
+  const { cover, stretch } = reachThresholds(ctx)
+  if (rackets <= cover) return 'cover'
+  if (rackets <= stretch) return 'stretch'
   return 'open'
+}
+
+export type HoleSummary = {
+  shooterLabel: string
+  opponentLabel: string
+  courseLabel: string
+  distance: number
+  tier: ReachTier
+}
+
+/** 選択中の打者に対し、相手の担当コースのうち最も遠い地点（=今の穴） */
+export function weakestHole(shooter: Player, players: Player[], mode: MatchMode, junior: boolean): HoleSummary | null {
+  const rows = opponentDistances(shooter, players, mode)
+  let best: { label: string; courseLabel: string; distance: number; role: PlayerRole } | null = null
+  for (const row of rows) {
+    const opponent = players.find((player) => player.id === row.playerId)
+    const candidates: { courseLabel: string; distance: number }[] = [
+      { courseLabel: row.outer.side === 'left' ? '左コース' : '右コース', distance: row.outer.distance },
+      { courseLabel: 'センター', distance: row.center.distance },
+    ]
+    for (const candidate of candidates) {
+      if (!best || candidate.distance > best.distance) {
+        best = {
+          label: row.label,
+          courseLabel: candidate.courseLabel,
+          distance: candidate.distance,
+          role: opponent?.role ?? 'all',
+        }
+      }
+    }
+  }
+  if (!best) return null
+  return {
+    shooterLabel: shooter.label,
+    opponentLabel: best.label,
+    courseLabel: best.courseLabel,
+    distance: best.distance,
+    tier: reachTier(best.distance, { role: best.role, junior }),
+  }
 }
 
 export type CourseMeasure = {

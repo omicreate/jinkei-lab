@@ -20,6 +20,7 @@ body {
 .app-header {
   min-height: 72px;
   padding: 12px clamp(16px, 3vw, 38px);
+  padding-top: max(12px, env(safe-area-inset-top, 0px));
   display: flex;
   align-items: center;
   gap: 12px;
@@ -185,7 +186,17 @@ body {
 .slot-empty { flex: 1; padding: 0 10px; color: #617287; border-style: dashed; }
 
 .premise-chip { position: absolute; left: 12px; top: 12px; max-width: calc(100% - 90px); padding: 6px 11px; border-radius: 999px; background: rgba(13, 52, 118, .9); color: #fff; font-size: 12px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }
-.export-button { position: absolute; right: 12px; bottom: 12px; width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid #ccd7e2; border-radius: 12px; background: rgba(255, 255, 255, .94); color: #173560; cursor: pointer; box-shadow: 0 4px 14px rgba(22, 44, 74, .12); }
+.export-button { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid #ccd7e2; border-radius: 12px; background: rgba(255, 255, 255, .94); color: #173560; cursor: pointer; box-shadow: 0 4px 14px rgba(22, 44, 74, .12); }
+.canvas-actions { position: absolute; right: 12px; bottom: max(12px, env(safe-area-inset-bottom, 0px)); display: flex; gap: 8px; z-index: 3; }
+.hole-stack { position: absolute; left: 12px; right: 96px; top: 12px; display: grid; gap: 6px; pointer-events: none; z-index: 2; }
+.canvas-wrap:has(.premise-chip) .hole-stack { top: 46px; }
+.hole-chip { width: fit-content; max-width: 100%; padding: 7px 11px; border-radius: 12px; background: rgba(17, 42, 80, .92); color: #fff; display: grid; gap: 1px; box-shadow: 0 6px 18px rgba(17, 42, 80, .2); }
+.hole-chip.tier-cover { background: rgba(15, 95, 99, .94); }
+.hole-chip.tier-stretch { background: rgba(13, 52, 118, .94); }
+.hole-chip.tier-open { background: rgba(230, 78, 22, .94); }
+.hole-kicker { font-size: 10px; font-weight: 800; letter-spacing: .08em; opacity: .86; }
+.hole-chip strong { font-size: 13px; line-height: 1.3; }
+.hole-chip span:last-child { font-size: 12px; opacity: .95; }
 .course-label { paint-order: stroke; stroke: #fff; stroke-width: .14px; stroke-linejoin: round; }
 
 .undo-toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-radius: 12px; background: #112a50; color: #fff; font-size: 13px; box-shadow: 0 10px 28px rgba(17, 42, 80, .35); }

@@ -23,21 +23,21 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <!-- 面別リンク遷移の計測（?src= が付いているときだけ1回送る／2026-07-29 設置・設計=ナオ） -->
+    <!-- 面別リンク遷移の計測。?src= があるときだけ src と app 名を1回送る。配置データは送らない -->
     <script>
     (function () {
       var ENDPOINT = 'https://script.google.com/macros/s/AKfycbxdPOPn6aUE3yhlCWt_qadU6POkEkxYXN3qxLsdcel-FWJFa_Fmu4NjL7P_jcrLew4/exec';
       var APP = 'jinkei-lab';
       try {
         var src = new URLSearchParams(location.search).get('src');
-        if (!src) return;                                 // 印のないアクセスは何もしない
-        var KEY = 'src_sent:' + APP + ':' + src;          // 3アプリは同一オリジンのため、キーを分けないと共有される
-    if (sessionStorage.getItem(KEY)) return;          // 同じ訪問・同じ面での二重計上だけを防ぐ
+        if (!src) return;
+        var KEY = 'src_sent:' + APP + ':' + src;
+        if (sessionStorage.getItem(KEY)) return;
         sessionStorage.setItem(KEY, '1');
         var url = ENDPOINT + '?src=' + encodeURIComponent(src) + '&app=' + encodeURIComponent(APP);
         if (navigator.sendBeacon) navigator.sendBeacon(url);
         else fetch(url, { mode: 'no-cors', keepalive: true });
-      } catch (e) { /* 計測が失敗してもアプリ本体は絶対に止めない */ }
+      } catch (e) { /* 計測が失敗してもアプリ本体は止めない */ }
     })();
     </script>
   </body>

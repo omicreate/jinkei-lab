@@ -1,5 +1,5 @@
 import { COURT_HALF_L, RACKET_LENGTH } from './geometry'
-import type { Player, Point } from './types'
+import type { Player, PlayerRole, Point } from './types'
 
 // 座標の出典（いずれも経験者監修の確定値）:
 // - 左右(x)の基準 = 4展開の基準配置表
@@ -48,34 +48,34 @@ export const FORMATION_OPTIONS: { value: Formation; label: string }[] = [
   { value: 'wZenei', label: 'W前衛' },
 ]
 
-type PlayerPatch = { label: string; point: Point }
+type PlayerPatch = { label: string; point: Point; role: PlayerRole }
 type TeamPatch = Record<string, PlayerPatch>
 
 // 4展開の左右(x)は基準配置表の値、深さはラケット基準。呼称はAチーム（手前・自陣）視点
 const TENKAI_PRESETS: Record<Tenkai, TeamPatch> = {
   cross: {
-    a1: { label: 'A後衛', point: kouei(8.0, 'A') },
-    a2: { label: 'A前衛', point: zenei(3.5, 'A') },
-    b1: { label: 'B後衛', point: kouei(3.0, 'B') },
-    b2: { label: 'B前衛', point: zenei(7.5, 'B') },
+    a1: { label: 'A後衛', point: kouei(8.0, 'A'), role: 'back' },
+    a2: { label: 'A前衛', point: zenei(3.5, 'A'), role: 'front' },
+    b1: { label: 'B後衛', point: kouei(3.0, 'B'), role: 'back' },
+    b2: { label: 'B前衛', point: zenei(7.5, 'B'), role: 'front' },
   },
   reverseCross: {
-    a1: { label: 'A後衛', point: kouei(3.0, 'A') },
-    a2: { label: 'A前衛', point: zenei(7.5, 'A') },
-    b1: { label: 'B後衛', point: kouei(8.0, 'B') },
-    b2: { label: 'B前衛', point: zenei(3.5, 'B') },
+    a1: { label: 'A後衛', point: kouei(3.0, 'A'), role: 'back' },
+    a2: { label: 'A前衛', point: zenei(7.5, 'A'), role: 'front' },
+    b1: { label: 'B後衛', point: kouei(8.0, 'B'), role: 'back' },
+    b2: { label: 'B前衛', point: zenei(3.5, 'B'), role: 'front' },
   },
   straightRight: {
-    a1: { label: 'A後衛', point: kouei(8.5, 'A') },
-    a2: { label: 'A前衛', point: zenei(6.5, 'A') },
-    b1: { label: 'B後衛', point: kouei(8.5, 'B') },
-    b2: { label: 'B前衛', point: zenei(6.5, 'B') },
+    a1: { label: 'A後衛', point: kouei(8.5, 'A'), role: 'back' },
+    a2: { label: 'A前衛', point: zenei(6.5, 'A'), role: 'front' },
+    b1: { label: 'B後衛', point: kouei(8.5, 'B'), role: 'back' },
+    b2: { label: 'B前衛', point: zenei(6.5, 'B'), role: 'front' },
   },
   straightLeft: {
-    a1: { label: 'A後衛', point: kouei(2.5, 'A') },
-    a2: { label: 'A前衛', point: zenei(4.5, 'A') },
-    b1: { label: 'B後衛', point: kouei(2.5, 'B') },
-    b2: { label: 'B前衛', point: zenei(4.5, 'B') },
+    a1: { label: 'A後衛', point: kouei(2.5, 'A'), role: 'back' },
+    a2: { label: 'A前衛', point: zenei(4.5, 'A'), role: 'front' },
+    b1: { label: 'B後衛', point: kouei(2.5, 'B'), role: 'back' },
+    b2: { label: 'B前衛', point: zenei(4.5, 'B'), role: 'front' },
   },
 }
 
@@ -83,30 +83,30 @@ const TENKAI_PRESETS: Record<Tenkai, TeamPatch> = {
 const FORMATION_PRESETS: Record<Team, Record<Formation, TeamPatch>> = {
   A: {
     gankou: {
-      a1: { label: 'A後衛', point: kouei(8.0, 'A') },
-      a2: { label: 'A前衛', point: zenei(3.5, 'A') },
+      a1: { label: 'A後衛', point: kouei(8.0, 'A'), role: 'back' },
+      a2: { label: 'A前衛', point: zenei(3.5, 'A'), role: 'front' },
     },
     wKouei: {
-      a1: { label: 'A後衛1', point: kouei(8.0, 'A') },
-      a2: { label: 'A後衛2', point: kouei(3.0, 'A') },
+      a1: { label: 'A後衛1', point: kouei(8.0, 'A'), role: 'back' },
+      a2: { label: 'A後衛2', point: kouei(3.0, 'A'), role: 'back' },
     },
     wZenei: {
-      a1: { label: 'A前衛1', point: fromSpec(7.5, 17.77) },
-      a2: { label: 'A前衛2', point: fromSpec(3.5, 17.77) },
+      a1: { label: 'A前衛1', point: fromSpec(7.5, 17.77), role: 'front' },
+      a2: { label: 'A前衛2', point: fromSpec(3.5, 17.77), role: 'front' },
     },
   },
   B: {
     gankou: {
-      b1: { label: 'B後衛', point: kouei(3.0, 'B') },
-      b2: { label: 'B前衛', point: zenei(7.5, 'B') },
+      b1: { label: 'B後衛', point: kouei(3.0, 'B'), role: 'back' },
+      b2: { label: 'B前衛', point: zenei(7.5, 'B'), role: 'front' },
     },
     wKouei: {
-      b1: { label: 'B後衛1', point: kouei(3.0, 'B') },
-      b2: { label: 'B後衛2', point: kouei(8.0, 'B') },
+      b1: { label: 'B後衛1', point: kouei(3.0, 'B'), role: 'back' },
+      b2: { label: 'B後衛2', point: kouei(8.0, 'B'), role: 'back' },
     },
     wZenei: {
-      b1: { label: 'B前衛1', point: fromSpec(3.5, 6.0) },
-      b2: { label: 'B前衛2', point: fromSpec(7.5, 6.0) },
+      b1: { label: 'B前衛1', point: fromSpec(3.5, 6.0), role: 'front' },
+      b2: { label: 'B前衛2', point: fromSpec(7.5, 6.0), role: 'front' },
     },
   },
 }
@@ -115,7 +115,7 @@ function patchPlayers(players: Player[], patches: TeamPatch): Player[] {
   return players.map((player) => {
     const patch = patches[player.id]
     if (!patch) return player
-    return { ...player, ...patch.point, label: patch.label }
+    return { ...player, ...patch.point, label: patch.label, role: patch.role }
   })
 }
 

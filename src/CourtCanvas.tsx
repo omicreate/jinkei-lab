@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { Camera } from 'lucide-react'
+import { Camera, Link2 } from 'lucide-react'
 import {
   COURT_HALF_L,
   DOUBLES_HALF_W,
@@ -18,6 +18,7 @@ import {
   zoneGeometry,
 } from './geometry'
 import type { MatchMode, Orientation, Player, Point } from './types'
+import type { HoleSummary } from './geometry'
 
 type Props = {
   mode: MatchMode
@@ -28,11 +29,16 @@ type Props = {
   pan: Point
   rulerPos: { x: number | null; y: number | null }
   premise: string
+  junior: boolean
+  holes: HoleSummary[]
+  shareUrl: string
   onPlayersChange: (players: Player[]) => void
   onToggleActive: (id: string) => void
   onZoomChange: (zoom: number) => void
   onPanChange: (pan: Point) => void
   onRulerPosChange: (pos: { x: number | null; y: number | null }) => void
+  onShareUrl: () => void
+  onShareNotice: (message: string) => void
 }
 
 type DragState = {
@@ -79,7 +85,10 @@ const FIRST_VISIT_HINTS = [
   '右端の「設定」から陣形プリセットを呼び出せます',
 ]
 
-export default function CourtCanvas({ mode, orientation, players, activeIds, zoom, pan, rulerPos, premise, onPlayersChange, onToggleActive, onZoomChange, onPanChange, onRulerPosChange }: Props) {
+export default function CourtCanvas({
+  mode, orientation, players, activeIds, zoom, pan, rulerPos, premise, junior, holes, shareUrl,
+  onPlayersChange, onToggleActive, onZoomChange, onPanChange, onRulerPosChange, onShareUrl, onShareNotice,
+}: Props) {
   const svgRef = useRef<SVGSVGElement>(null)
   const dragRef = useRef<DragState | null>(null)
   const pointersRef = useRef(new Map<number, Point>())
@@ -250,14 +259,16 @@ export default function CourtCanvas({ mode, orientation, players, activeIds, zoo
     dragRef.current = null
   }
 
-  const exportPng = () => {
+  const rasterizePng = () => new Promise<Blob | null>((resolve) => {
     const svg = svgRef.current
-    if (!svg) return
+    if (!svg) {
+      resolve(null)
+      return
+    }
     const rect = svg.getBoundingClientRect()
     const clone = svg.cloneNode(true) as SVGSVGElement
     clone.setAttribute('width', String(rect.width))
     clone.setAttribute('height', String(rect.height))
-    // CSSクラス由来のスタイルはシリアライズで失われるため、計算済みスタイルをインライン化する
     const styleProps = ['opacity', 'fill', 'fill-opacity', 'stroke', 'stroke-width', 'stroke-linejoin', 'stroke-dasharray', 'paint-order', 'font-size', 'font-weight', 'font-family']
     const sources = svg.querySelectorAll<SVGElement>('*')
     const targets = clone.querySelectorAll<SVGElement>('*')
@@ -278,31 +289,72 @@ export default function CourtCanvas({ mode, orientation, players, activeIds, zoo
       canvas.width = Math.round(rect.width * scale)
       canvas.height = Math.round(rect.height * scale) + band
       const ctx = canvas.getContext('2d')
-      if (!ctx) return
+      if (!ctx) {
+        URL.revokeObjectURL(url)
+        resolve(null)
+        return
+      }
       ctx.fillStyle = '#f7fafc'
       ctx.fillRect(0, 0, canvas.width, canvas.height)
       ctx.drawImage(image, 0, 0, rect.width * scale, rect.height * scale)
       ctx.fillStyle = '#0d3476'
       ctx.fillRect(0, canvas.height - band, canvas.width, band)
       ctx.fillStyle = '#ffffff'
-      ctx.font = '600 22px "Noto Sans JP", sans-serif'
+      ctx.font = '600 22px "Hiragino Sans", "Yu Gothic UI", sans-serif'
       ctx.textBaseline = 'middle'
       ctx.fillText(premise ? `前提: ${premise}` : '陣形ラボ', 20, canvas.height - band / 2)
       ctx.textAlign = 'right'
-      ctx.fillText('ソフトテニスIQ｜陣形ラボ・ラケット1本分 = 0.69m', canvas.width - 20, canvas.height - band / 2)
+      ctx.fillText('ソフトテニスIQ｜陣形ラボ・平面の簡略モデル', canvas.width - 20, canvas.height - band / 2)
       URL.revokeObjectURL(url)
-      canvas.toBlob((blob) => {
-        if (!blob) return
-        const now = new Date()
-        const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
-        const link = document.createElement('a')
-        link.href = URL.createObjectURL(blob)
-        link.download = `court-analysis-${stamp}.png`
-        link.click()
-        URL.revokeObjectURL(link.href)
-      }, 'image/png')
+      canvas.toBlob((blob) => resolve(blob), 'image/png')
+    }
+    image.onerror = () => {
+      URL.revokeObjectURL(url)
+      resolve(null)
     }
     image.src = url
+  })
+
+  const downloadPng = async () => {
+    const blob = await rasterizePng()
+    if (!blob) {
+      onShareNotice('画像を書き出せませんでした')
+      return
+    }
+    const now = new Date()
+    const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `court-analysis-${stamp}.png`
+    link.click()
+    URL.revokeObjectURL(link.href)
+  }
+
+  const sharePng = async () => {
+    const blob = await rasterizePng()
+    if (!blob) {
+      onShareNotice('画像を書き出せませんでした')
+      return
+    }
+    const file = new File([blob], 'court-analysis.png', { type: 'image/png' })
+    const payload: ShareData = {
+      title: '陣形ラボ',
+      text: premise ? `前提: ${premise}` : 'ソフトテニスの配置',
+      url: shareUrl,
+    }
+    try {
+      if (navigator.canShare?.({ ...payload, files: [file] })) {
+        await navigator.share({ ...payload, files: [file] })
+        return
+      }
+      if (navigator.share) {
+        await navigator.share(payload)
+        return
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return
+    }
+    await downloadPng()
   }
 
   const P = (point: Point) => project(point, orientation)
@@ -436,7 +488,7 @@ export default function CourtCanvas({ mode, orientation, players, activeIds, zoo
               return (['outer', 'center'] as const).map((side) => {
                 const measureItem = row[side]
                 const b = P(measureItem.foot)
-                const tier = reachTier(measureItem.distance)
+                const tier = reachTier(measureItem.distance, { role: opponent.role, junior })
                 const color = tier === 'cover' ? '#0f5f63' : tier === 'stretch' ? '#0d3476' : '#e64e16'
                 // ラベルは判定色のピル（白文字）。長い線は中点の垂直脇、短い線は到達点の先に置いて
                 // マーカーとの重なりを避ける
@@ -558,9 +610,23 @@ export default function CourtCanvas({ mode, orientation, players, activeIds, zoo
         })}
       </svg>
       {premise && <div className="premise-chip">前提: {premise}</div>}
-      <button className="export-button" onClick={exportPng} aria-label="この配置を画像で保存" title="この配置を画像で保存">
-        <Camera size={17} />
-      </button>
+      {holes.length > 0 && <div className="hole-stack" aria-live="polite">
+        {holes.map((hole) => (
+          <div className={`hole-chip tier-${hole.tier}`} key={`${hole.shooterLabel}-${hole.opponentLabel}-${hole.courseLabel}`}>
+            <span className="hole-kicker">今の穴</span>
+            <strong>{hole.shooterLabel} → {hole.opponentLabel}の{hole.courseLabel}</strong>
+            <span>約 {(hole.distance / RACKET_LENGTH).toFixed(1)} 本・{hole.tier === 'cover' ? 'カバー圏内' : hole.tier === 'stretch' ? '踏み込みで届く' : 'リーチ外'}</span>
+          </div>
+        ))}
+      </div>}
+      <div className="canvas-actions">
+        <button type="button" className="export-button" onClick={onShareUrl} aria-label="配置リンクをコピー" title="配置リンクをコピー（流入パラメータなし）">
+          <Link2 size={17} />
+        </button>
+        <button type="button" className="export-button" onClick={sharePng} aria-label="この配置を画像で共有" title="この配置を画像で共有">
+          <Camera size={17} />
+        </button>
+      </div>
       <div className={`canvas-hint ${hasZones ? '' : 'is-cta'}`}>
         {pulseSession
           ? FIRST_VISIT_HINTS[hintIndex]
